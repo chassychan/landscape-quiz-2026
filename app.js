@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const KEY = 'landscape_exam_web_2026_v1';
+  const KEY = 'landscape_exam_web_2026_v2';
   const app = document.getElementById('app');
   let bank = null;
   let state = load();
@@ -31,14 +31,17 @@
     quiz();
   }
   function home() {
-    const completed = Object.keys(state.submissions).filter(k => state.submissions[k]?.total === 30).length;
+    const dayCounts = Array.from({ length: 6 }, (_, i) => bank.QUESTIONS.filter(q => q.day === i + 1).length);
+    const completedDays = dayCounts.filter((count, i) => state.submissions[i + 1]?.total === count).length;
+    const completedQuestions = dayCounts.reduce((sum, count, i) => sum + (state.submissions[i + 1]?.total === count ? count : 0), 0);
     const wrongCount = bank.QUESTIONS.filter(q => state.wrongIds[q.id]).length;
     const cards = Array.from({ length: 6 }, (_, i) => {
-      const day = i + 1, date = 9 + day, r = state.submissions[day];
-      const label = r ? `${r.score} 分 · ${r.correct}/30 题正确` : '30 题 · 单选与多选';
+      const day = i + 1, date = 9 + day, count = dayCounts[i], r = state.submissions[day]?.total === count ? state.submissions[day] : null;
+      const partial = bank.QUESTIONS.filter(q => q.day === day && (state.answers[day]?.[q.id] || []).length).length;
+      const label = r ? `${r.score} 分 · ${r.correct}/${count} 题正确` : `${count} 题 · ${partial ? `已暂存 ${partial} 题` : '单选与多选'}`;
       return `<button class="day-card" data-action="open-day" data-day="${day}"><span class="date-badge"><strong>${date}</strong><small>10 月</small></span><span class="day-text"><strong>第 ${day} 天 <span class="pill ${r ? 'done' : 'pending'}">${r ? '已完成' : '待练习'}</span></strong><small>${label}</small></span><span class="chevron">›</span></button>`;
     }).join('');
-    app.innerHTML = `<header class="hero"><div class="topline"><span class="brand">LANDSCAPE · 2026</span><span>10 月 17 日考试</span></div><div class="eyebrow">每日一练 · 稳步复习</div><h1>景观设计刷题</h1><p>五本教材，六天完成 180 道题。提交后查看得分和逐题解析，16 日集中复习错题。</p><div class="hero-stats"><div class="stat"><strong>${completed}/6</strong><span>完成天数</span></div><div class="stat"><strong>${completed * 30}/180</strong><span>已完成题目</span></div><div class="stat"><strong>${wrongCount}</strong><span>累计错题</span></div></div></header><main class="main"><div class="section-head"><h2>每日练习</h2><span>10.10—10.15 · 每天 30 题</span></div><div class="day-list">${cards}</div><section class="panel review-card"><h3>10 月 16 日 · 错题回炉</h3><p>${wrongCount ? `目前收录 ${wrongCount} 道错题。重新作答后可再次查看完整解析。` : '每日提交后，答错的题会自动收录到这里。'}</p><button class="primary full" data-action="open-review" ${wrongCount ? '' : 'disabled'}>开始错题复习</button></section><section class="panel"><h3>覆盖五本教材</h3><p>按原书内容整理，兼顾规范条文、设计方法与案例知识。</p><div class="book-grid">${bank.BOOKS.map(b => `<span class="book-chip">${esc(b.name)}</span>`).join('')}</div></section><section class="panel"><h3>备考提醒</h3><p>多选题需选全且不多选才得分。建议每日及时查看解析；完成错题复习后仍需回看教材重点。题库成绩不能保证实际考试分数。</p></section></main>`;
+    app.innerHTML = `<header class="hero"><div class="topline"><span class="brand">LANDSCAPE · 2026</span><span>10 月 17 日考试</span></div><div class="eyebrow">每日一练 · 修订题库</div><h1>景观设计刷题</h1><p>三本考试题集全部收录，两本规范精选重点。10 月 10–15 日完成 ${bank.QUESTIONS.length} 题，16 日集中复习错题。</p><div class="hero-stats"><div class="stat"><strong>${completedDays}/6</strong><span>完成天数</span></div><div class="stat"><strong>${completedQuestions}/${bank.QUESTIONS.length}</strong><span>已完成题目</span></div><div class="stat"><strong>${wrongCount}</strong><span>累计错题</span></div></div></header><main class="main"><div class="section-head"><h2>每日练习</h2><span>10.10—10.15 · 每天 83–84 题</span></div><div class="day-list">${cards}</div><section class="panel review-card"><h3>10 月 16 日 · 错题回炉</h3><p>${wrongCount ? `目前收录 ${wrongCount} 道错题。重新作答后可再次查看完整解析。` : '每日提交后，答错的题会自动收录到这里。'}</p><button class="primary full" data-action="open-review" ${wrongCount ? '' : 'disabled'}>开始错题复习</button></section><section class="panel"><h3>考试资料</h3><p>三本题集原题共 430 道；判断题改为“正确/错误”单选。两本规范另选 72 道重点题。</p><div class="book-grid">${bank.BOOKS.map(b => `<span class="book-chip">${esc(b.name)}</span>`).join('')}</div></section><section class="panel"><h3>备考提醒</h3><p>多选题需选全且不多选才得分。每日做题会自动暂存；提交后统一批改并显示解析。题库成绩不能保证实际考试分数。</p></section></main>`;
   }
   function quiz() {
     const qs = questionSet();
@@ -46,7 +49,7 @@
     view.index = Math.min(Math.max(0, view.index), qs.length - 1);
     const q = qs[view.index], selected = answers()[q.id] || [];
     const answered = qs.filter(item => (answers()[item.id] || []).length).length;
-    const submitted = view.review ? state.review : state.submissions[view.day];
+    const submitted = view.review ? (state.review?.total === qs.length ? state.review : null) : state.submissions[view.day];
     const showAnswer = !!submitted;
     const isCorrect = showAnswer && same(selected, q.answer);
     const options = q.options.map((o, i) => {
@@ -55,7 +58,7 @@
       return `<button class="${classNames}" data-action="select" data-choice="${i}" aria-pressed="${picked}" ${showAnswer ? 'disabled' : ''}><span class="letter">${letters[i]}</span><span>${esc(o)}</span></button>`;
     }).join('');
     const jump = qs.map((item, i) => { const done = (answers()[item.id] || []).length; const wrong = showAnswer && !same(answers()[item.id] || [], item.answer); return `<button class="jump ${i === view.index ? 'active' : ''} ${done ? 'answered' : ''} ${wrong ? 'wrong' : ''}" data-action="jump" data-index="${i}" aria-label="第 ${i + 1} 题${done ? '，已作答' : '，未作答'}">${i + 1}</button>`; }).join('');
-    app.innerHTML = `<div class="topbar"><button class="back" data-action="home">‹ 返回首页</button><div class="topbar-title">${view.review ? '错题复习' : `第 ${view.day} 天 · 10 月 ${9 + view.day} 日`}</div></div><main class="quiz-main"><div class="progress-copy"><span>第 ${view.index + 1} / ${qs.length} 题</span><span>已作答 ${answered} / ${qs.length}</span></div><div class="track"><div class="fill" style="width:${answered / qs.length * 100}%"></div></div><section class="question-card"><div class="question-meta"><span class="type ${q.type === 'multi' ? 'multi' : ''}">${q.type === 'multi' ? '多选题' : '单选题'}</span><span class="book-name">${esc(q.bookShort)}</span></div><h2>${esc(q.stem)}</h2><div class="option-list">${options}</div>${showAnswer ? `<div class="explanation"><strong>${isCorrect ? '回答正确' : '回答错误'} · 正确答案 ${q.answer.map(i => letters[i]).join('、')}</strong>${esc(q.explanation)}</div>` : `<p class="hint" style="margin-top:16px">${q.type === 'multi' ? '可选择多个选项；提交后统一批改。' : '请选择一个选项；提交后统一批改。'}</p>`}<div class="source">出处：${esc(q.source)}</div></section><div class="jump-grid">${jump}</div></main><div class="footer-actions"><button class="secondary" data-action="prev" ${view.index === 0 ? 'disabled' : ''}>上一题</button><button class="primary" data-action="${view.index === qs.length - 1 ? (showAnswer ? 'result' : 'submit') : 'next'}">${view.index === qs.length - 1 ? (showAnswer ? '查看成绩' : '提交批改') : '下一题'}</button></div>`;
+    app.innerHTML = `<div class="topbar"><button class="back" data-action="home">‹ 返回首页</button><div class="topbar-title">${view.review ? '错题复习' : `第 ${view.day} 天 · 10 月 ${9 + view.day} 日`}</div></div><main class="quiz-main"><div class="progress-copy"><span>第 ${view.index + 1} / ${qs.length} 题</span><span>已作答 ${answered} / ${qs.length}</span></div><div class="track"><div class="fill" style="width:${answered / qs.length * 100}%"></div></div><section class="question-card"><div class="question-meta"><span class="type ${q.type === 'multi' ? 'multi' : ''}">${q.originType === 'judge' ? '判断题·单选' : q.type === 'multi' ? '多选题' : '单选题'}</span><span class="book-name">${esc(q.bookShort)}</span></div><h2>${esc(q.stem)}</h2><div class="option-list">${options}</div>${showAnswer ? `<div class="explanation"><strong>${isCorrect ? '回答正确' : '回答错误'} · 正确答案 ${q.answer.map(i => letters[i]).join('、')}</strong>${esc(q.explanation)}</div>` : `<p class="hint" style="margin-top:16px">${q.type === 'multi' ? '可选择多个选项；提交后统一批改。' : '请选择一个选项；提交后统一批改。'}</p>`}<div class="source">出处：${esc(q.source)}</div></section><div class="jump-grid">${jump}</div></main><div class="footer-actions"><button class="secondary" data-action="prev" ${view.index === 0 ? 'disabled' : ''}>上一题</button><button class="primary" data-action="${view.index === qs.length - 1 ? (showAnswer ? 'result' : 'submit') : 'next'}">${view.index === qs.length - 1 ? (showAnswer ? '查看成绩' : '提交批改') : '下一题'}</button></div>`;
   }
   function result() {
     const qs = questionSet();
@@ -95,5 +98,5 @@
       save(); navigate('quiz', { index: 0 });
     }
   });
-  fetch('./questions.json').then(r => { if (!r.ok) throw new Error('题库加载失败'); return r.json(); }).then(data => { bank = data; render(); }).catch(err => { app.innerHTML = `<div class="error">${esc(err.message)}。请刷新页面重试。</div>`; });
+  fetch('./questions.json?v=2').then(r => { if (!r.ok) throw new Error('题库加载失败'); return r.json(); }).then(data => { bank = data; render(); }).catch(err => { app.innerHTML = `<div class="error">${esc(err.message)}。请刷新页面重试。</div>`; });
 })();
